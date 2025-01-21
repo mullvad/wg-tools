@@ -1,8 +1,9 @@
-# mullvad-wg.py
+# wg-mullvad.py
 
-This repository contains a python script that generates wireguard configuration files to use Mullvad with wireguard.
+This repository contains a python script that generates WireGuard®[^1] configuration files for all Mullvad relays.
 
-Use --help to see what can be configured.
+Use --help to see how to use it.
 
-The script can generate and reuse the private wireguard key to generate/update files
+The script can generate, save and reuse a private key when generating configurations.
 
+[^1]: "WireGuard" is a registered trademark of Jason A. Donenfeld.

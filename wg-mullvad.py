@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from cryptography.hazmat.primitives import serialization
 
 
-_version = '0.1 alfa'
+_version = '1.0'
 
 
 def generate_publickey(privatekey):
@@ -148,8 +148,8 @@ class Mullvad:
             if _code == 'PUBKEY_IN_USE':
                 print(f'Error: Private key settings exits in {self._settings_file} but device has been removed')
                 print('Solution 1: Wait for grace period to pass before using this key (5 min)')
-                print('Solution 2: Remove private key from setting file if you want to create a new device')
-                sys.exit(1)
+                print('Solution 2: Remove setting file if you want to create a new device')
+            sys.exit(1)
 
     def get_wireguard_info(self):
         try:
@@ -164,8 +164,7 @@ class Mullvad:
     def create_wg_configs(self, device, privatekey):
         wg = self.get_wireguard_info()
         output_dir = pathlib.Path(self._output_dir).expanduser()
-        if not output_dir.is_dir():
-            output_dir.mkdir(exist_ok=True, parents=True)
+        output_dir.mkdir(exist_ok=True, parents=True)
         print(f'Creating files in: {output_dir}')
         for relay in wg['relays']:
             _hostname = relay['hostname']
@@ -178,7 +177,7 @@ class Mullvad:
                 config.set('Interface', 'privateKey', privatekey)
                 config.set('Interface', 'address',  ','.join([device['ipv4_address'], device['ipv6_address']]))
                 if self._wg_dns:
-                    config.set('Interface', 'dns', self._wg_dns)
+                    config.set('Interface', 'dns', ','.join([str(x) for x in self._wg_dns]))
                 else:
                     config.set('Interface', 'dns', ','.join([wg['ipv4_gateway'], wg['ipv6_gateway']]))
                 config.add_section('Peer')
@@ -194,27 +193,21 @@ class Mullvad:
                 config.write(_file)
 
 
-def sanity(args):
-    if args.wg_dns:
-        for _ip in args.wg_dns.split(','):
-            try:
-                ipaddress.ip_address(_ip.strip())
-            except ValueError:
-                print('Dns option has to contain valid ip numbers separated by comma')
-                return False
-    if args.account_number:
-        try:
-            int(args.account_number)
-        except ValueError:
-            print('Account is not a number')
-            return False
-    if args.wg_relay_port:
-        try:
-            int(args.wg_relay_port)
-        except ValueError:
-            print('Port is not a number')
-            return False
-    return True
+def validate_account(value):
+    if not value.isdigit():
+        raise argparse.ArgumentTypeError("The string must contain only numbers.")
+    return value
+
+
+def validate_port(value):
+    try:
+        port = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Port must be an integer, but got '{value}'.")
+
+    if port < 1 or port > 65535:
+        raise argparse.ArgumentTypeError("Port number must be between 1 and 65535.")
+    return port
 
 
 def main():
@@ -222,8 +215,11 @@ def main():
             description=f'{__file__}',
             formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument(
-        '--account', dest='account_number', action='store', help='mullvad account number')
+    required = parser.add_argument_group('required arguments')
+    required.add_argument(
+            '--account', dest='account_number', type=validate_account,
+            action='store', required=True, help='mullvad account number')
+
     parser.add_argument(
         '--settings-file', dest='settings_file', action='store',
         default='~/.config/mullvad/wg0.conf', help='settings file to use')
@@ -231,31 +227,22 @@ def main():
         '--output-dir', dest='output_dir', action='store',
         default='~/.config/mullvad/wg0', help='directory to write settings')
     parser.add_argument(
-        '--wg-relay-port', dest='wg_relay_port', action='store',
+        '--wg-relay-port', dest='wg_relay_port', action='store', type=validate_port,
         default=51820, help='use custom port for relays in wireguard configs')
     parser.add_argument(
-        '--dns', dest='wg_dns', action='store',
-        default='', help='use custom dns server in wireguard configs')
+        '--dns', dest='wg_dns', action='store', nargs='+', type=ipaddress.ip_address,
+        help='use custom dns server in wireguard configs')
     parser.add_argument(
         '--hijack-dns', dest='wg_hijack_dns', help='activate hijack dns when creating device', action='store_true')
     parser.add_argument(
         '--ipv6', dest='wg_relay_ipv6', help='use ipv6 address for relays in wireguard configs', action='store_true')
     parser.add_argument(
-        '--version', help='show version information', action='store_true')
+            '--version', help='show version information', action='version', version=f'%(prog)s-{_version}')
+
     args = parser.parse_args()
 
-    if not sanity(args):
-        sys.exit(1)
-
-    if args.version:
-        print('Version:', _version)
-        sys.exit()
-    if args.account_number:
-        mullvad = Mullvad(args)
-        mullvad.run()
-    else:
-        parser.print_help(sys.stderr)
-        print('error: No account specified')
+    mullvad = Mullvad(args)
+    mullvad.run()
 
 
 if __name__ == '__main__':
