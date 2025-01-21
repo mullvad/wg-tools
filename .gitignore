@@ -1,0 +1,6 @@
+# Custom
+*.swp
+.DS_Store
+config/*
+__pycache__
+.env*
