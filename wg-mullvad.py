@@ -64,7 +64,7 @@ class Mullvad:
             elif len(multihop_servers) >= 1:
                 print('Select one of the following multihop servers:')
                 for server in multihop_servers:
-                    print(f"{server['hostname']}")
+                    print(f'{server["hostname"]}')
                 sys.exit(1)
             else:
                 print(f'No multihop-server matching hostname: {self._wg_multihop_server}')
@@ -164,7 +164,7 @@ class Mullvad:
         }
         try:
             response = self.api('https://api.mullvad.net/accounts/v1/devices', body)
-            print(f"Device created: ({response['name']}) {response['pubkey']}")
+            print(f'Device created: ({response["name"]}) {response["pubkey"]}')
             return response
         except urllib.error.HTTPError as e:
             error_message = json.load(e)
