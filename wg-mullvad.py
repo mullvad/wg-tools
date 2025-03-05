@@ -283,7 +283,7 @@ def validate_port(value: str) -> int:
 def main():
     parser = argparse.ArgumentParser(
             description=f'{__file__}',
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     required = parser.add_argument_group('required arguments')
     required.add_argument(
