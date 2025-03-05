@@ -298,14 +298,14 @@ def main():
         default='~/.config/mullvad/wg0', help='directory to write settings')
     parser.add_argument(
         '--wg-relay-port', dest='wg_relay_port', action='store', type=validate_port,
-        default=51820, help='use custom port for relays in wireguard configs')
+        default=51820, help='use custom port for relays in WireGuard configs')
     parser.add_argument(
         '--dns', dest='wg_dns', action='store', nargs='+', type=ipaddress.ip_address,
-        help='use custom dns server in wireguard configs')
+        help='use custom dns server in WireGuard configs')
     parser.add_argument(
         '--hijack-dns', dest='wg_hijack_dns', help='activate hijack dns when creating device', action='store_true')
     parser.add_argument(
-        '--ipv6', dest='wg_relay_ipv6', help='use ipv6 address for relays in wireguard configs', action='store_true')
+        '--ipv6', dest='wg_relay_ipv6', help='use ipv6 address for relays in WireGuard configs', action='store_true')
     parser.add_argument(
         '--multihop-server', dest='wg_multihop_server', action='store', default=None, help='use multihop server')
     parser.add_argument(
