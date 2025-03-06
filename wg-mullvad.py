@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from cryptography.hazmat.primitives import serialization
 
 
-_version = '1.1'
+_version = '1.1.1'
 
 
 def generate_publickey(privatekey: str) -> str:
