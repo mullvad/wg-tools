@@ -57,7 +57,7 @@ class MullvadApi:
         return self._api(f'{MullvadApi.HOST}/accounts/v1/devices')
 
     @functools.cached_property
-    def web_token(self):
+    def web_token(self) -> str:
         body = {
             'account_number': self.account_number,
         }
