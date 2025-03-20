@@ -175,7 +175,14 @@ class Mullvad:
         self._config = configparser.ConfigParser()
         self._settings_file = pathlib.Path(self._settings_file).expanduser()
 
+        self._list_devices = args.list_devices
+
     def run(self):
+        if self._list_devices:
+            for device in self.mullvad_api.list_devices():
+                print(json.dumps(device, indent=1))
+            return
+
         multihop_server = None
         if self._wg_multihop_server:
             multihop_servers = self.filter(MullvadApi.multihop_info(), self._wg_multihop_server)
@@ -319,6 +326,10 @@ def main():
         help='filter relay list before creating configuration files')
     parser.add_argument(
         '--version', help='show version information', action='version', version=f'%(prog)s-{_version}')
+
+    parser.add_argument(
+        '--list', dest='list_devices', help='list registered devices and exit',
+        action='store_true')
 
     args = parser.parse_args()
 
