@@ -291,10 +291,9 @@ def main():
             description=f'{__file__}',
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    required = parser.add_argument_group('required arguments')
-    required.add_argument(
-            '--account', dest='account_number', type=validate_account,
-            action='store', required=True, help='mullvad account number')
+    parser.add_argument(
+        '--account', dest='account_number', type=validate_account,
+        action='store', help='mullvad account number')
 
     parser.add_argument(
         '--settings-file', dest='settings_file', action='store',
@@ -323,6 +322,8 @@ def main():
     args = parser.parse_args()
 
     try:
+        if not args.account_number:
+            args.account_number = validate_account(input('Account number: '))
         mullvad = Mullvad(args)
         mullvad.run()
     except Exception as e:
