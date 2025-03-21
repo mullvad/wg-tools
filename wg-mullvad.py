@@ -14,8 +14,7 @@ import urllib.request
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
-
-_version = '1.1.2'
+_version = '1.1.3'
 
 
 def generate_publickey(privatekey: str) -> str:
@@ -78,23 +77,43 @@ class MullvadApi:
         with urllib.request.urlopen(req, data=json.dumps(body).encode() if body else None) as response:
             return self.get_response(response)
 
-    @functools.cache
     @staticmethod
-    def wireguard_relays():
-        req = urllib.request.Request(f'{MullvadApi.HOST}/public/relays/wireguard/v2/')
-        req.add_header('Accept-Encoding', 'gzip')
-        with urllib.request.urlopen(req) as response:
-            data = MullvadApi.get_response(response)
-        return data['wireguard']
+    def default_dns_servers() -> str:
+        return '10.64.0.1,fc00:bbbb:bbbb:bb01::1'
 
     @functools.cache
     @staticmethod
-    def multihop_info():
+    def all_wireguard_relays():
         req = urllib.request.Request(f'{MullvadApi.HOST}/www/relays/all')
         req.add_header('Accept-Encoding', 'gzip')
         with urllib.request.urlopen(req) as response:
             data = MullvadApi.get_response(response)
         return [i for i in data if i['type'] == 'wireguard']
+
+    @staticmethod
+    def wireguard_relays(**kwargs):
+        relays = MullvadApi.all_wireguard_relays()
+
+        location_prefix = kwargs.get('location_prefix', '')
+        if location_prefix:
+            relays = [r for r in relays if r['hostname'].startswith(location_prefix)]
+
+        active = kwargs.get('active', False)
+        if active:
+            relays = [r for r in relays if r['active']]
+
+        owned = kwargs.get('owned', False)
+        if owned:
+            relays = [r for r in relays if r['owned']]
+
+        st_boot = kwargs.get('stboot', False)
+        if st_boot:
+            relays = [r for r in relays if r.get('stboot', False)]
+
+        min_network_port_speed = kwargs.get('min_network_port_speed', 0)
+        relays = [r for r in relays if r['network_port_speed'] >= min_network_port_speed]
+
+        return relays
 
     @staticmethod
     def get_response(response):
@@ -112,7 +131,6 @@ class MullvadConfig:
         self.wg_relay_ipv6 = wg_relay_ipv6
 
     def create_wg_configs(self, relays, device, privatekey, multihop_server) -> None:
-        wg = MullvadApi.wireguard_relays()
         output_dir = pathlib.Path(self.output_dir).expanduser()
         output_dir.mkdir(exist_ok=True, parents=True)
         config = configparser.ConfigParser()
@@ -123,7 +141,7 @@ class MullvadConfig:
         if self.wg_dns:
             config.set('Interface', 'dns', ','.join([str(x) for x in self.wg_dns]))
         else:
-            config.set('Interface', 'dns', ','.join([wg['ipv4_gateway'], wg['ipv6_gateway']]))
+            config.set('Interface', 'dns', MullvadApi.default_dns_servers())
         config.add_section('Peer')
 
         print(f'Creating files in: {output_dir}')
@@ -170,38 +188,21 @@ class Mullvad:
         self._settings_file = args.settings_file
         self._wg_hijack_dns = args.wg_hijack_dns
         self._wg_multihop_server = args.wg_multihop_server
-        self._filter = args.filter
+        self._wg_relays_filter = {
+            'location_prefix': args.filter,
+            'active': args.wg_active,
+            'owned': args.wg_owned,
+            'stboot': args.wg_stboot,
+            'min_network_port_speed': args.wg_min_network_port_speed,
+        }
 
         self._config = configparser.ConfigParser()
         self._settings_file = pathlib.Path(self._settings_file).expanduser()
 
     def run(self):
-        multihop_server = None
-        if self._wg_multihop_server:
-            multihop_servers = self.filter(MullvadApi.multihop_info(), self._wg_multihop_server)
-            if len(multihop_servers) == 1:
-                multihop_server = multihop_servers[0]
-            elif len(multihop_servers) >= 1:
-                print('Select one of the following multihop servers:')
-                for server in multihop_servers:
-                    print(f'{server["hostname"]}')
-                sys.exit(1)
-            else:
-                print(f'No multihop-server matching hostname: {self._wg_multihop_server}')
-                sys.exit(1)
-
-        relays = self.filter(MullvadApi.multihop_info(), self._filter)
-        if not relays:
-            print(f'No relays matching filter: {self._filter}')
-            sys.exit(1)
-
-        if self._settings_file.is_file():
-            private_key = self.get_privatekey()
-        else:
-            private_key = generate_privatekey()
-            self.save_privatekey(private_key)
-
-        public_key = generate_publickey(private_key)
+        multihop_server = self.get_multihop_server()
+        relays = self.get_relays()
+        private_key, public_key = self.get_key_pair()
         device = self.get_device(public_key) or self.create_device(public_key)
         if device:
             self.mullvad_config.create_wg_configs(relays, device, private_key, multihop_server)
@@ -249,10 +250,38 @@ class Mullvad:
         except urllib.error.HTTPError as e:
             self.handle_mullvad_api_error(e)
 
-    def filter(self, data: list, prefix_filter) -> list:
-        if prefix_filter:
-            return [d for d in data if d['hostname'].startswith(prefix_filter)]
-        return data
+    def get_key_pair(self):
+        if self._settings_file.is_file():
+            private_key = self.get_privatekey()
+        else:
+            private_key = generate_privatekey()
+            self.save_privatekey(private_key)
+
+        public_key = generate_publickey(private_key)
+        return (public_key, private_key)
+
+    def get_multihop_server(self):
+        if not self._wg_multihop_server:
+            return None
+
+        multihop_servers = [r for r in MullvadApi.wireguard_relays() if r == self._wg_multihop_server]
+        if len(multihop_servers) == 1:
+            return multihop_servers[0]
+        elif len(multihop_servers) >= 1:
+            print('Select one of the following multihop servers:')
+            for server in multihop_servers:
+                print(f'{server["hostname"]}')
+            sys.exit(1)
+        else:
+            print(f'No multihop-server matching hostname: {self._wg_multihop_server}')
+            sys.exit(1)
+
+    def get_relays(self):
+        relays = MullvadApi.wireguard_relays(**self._wg_relays_filter)
+        if not relays:
+            print('No relays matching your settings.')
+            sys.exit(1)
+        return relays
 
     def handle_mullvad_api_error(self, err):
         error_message = MullvadApi.get_response(err)
@@ -314,9 +343,25 @@ def main():
         '--ipv6', dest='wg_relay_ipv6', help='use ipv6 address for relays in WireGuard configs', action='store_true')
     parser.add_argument(
         '--multihop-server', dest='wg_multihop_server', action='store', default=None, help='use multihop server')
+
+    # WireGuard relay(s) selection related parameters
     parser.add_argument(
         '--filter', action='store', default=None,
         help='filter relay list before creating configuration files')
+    parser.add_argument(
+        '--active', dest='wg_active', help='only select active Mullvad WireGuard relay(s)',
+        action='store_true')
+    parser.add_argument(
+        '--owned', dest='wg_owned', help='only select Mullvad owned WireGuard relay(s)', action='store_true')
+    parser.add_argument(
+        '--stboot', dest='wg_stboot',
+        help='only select system transparency (stboot/diskless) enabled Mullvad WireGuard relay(s)',
+        action='store_true')
+    parser.add_argument(
+        '--min-network-port-speed', dest='wg_min_network_port_speed',
+        help='only select Mullvad WireGuard relays having network speed (in Gbps) >= this number',
+        action='store', type=int, default=0)
+
     parser.add_argument(
         '--version', help='show version information', action='version', version=f'%(prog)s-{_version}')
 
