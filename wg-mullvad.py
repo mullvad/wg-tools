@@ -265,7 +265,7 @@ class Mullvad:
         if not self._wg_multihop_server:
             return None
 
-        multihop_servers = [r for r in MullvadApi.all_wireguard_relays() if r['hostname'] == self._wg_multihop_server]
+        multihop_servers = [r for r in MullvadApi.all_wireguard_relays() if r['hostname'].startswith(self._wg_multihop_server)]
         if len(multihop_servers) == 1:
             return multihop_servers[0]
         elif len(multihop_servers) >= 1:
