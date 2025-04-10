@@ -201,11 +201,11 @@ class Mullvad:
         self._settings_file = pathlib.Path(self._settings_file).expanduser()
 
     def run(self):
-        multihop_server = self.get_multihop_server()
-        relays = self.get_relays()
         private_key, public_key = self.get_key_pair()
         device = self.get_device(public_key) or self.create_device(public_key)
         if device:
+            multihop_server = self.get_multihop_server()
+            relays = self.get_relays()
             self.mullvad_config.create_wg_configs(relays, device, private_key, multihop_server)
 
     def get_privatekey(self) -> str:
